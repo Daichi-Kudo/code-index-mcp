@@ -73,7 +73,7 @@ class ProjectManagementService(BaseService):
             pass
         return patterns
 
-    def initialize_project(self, path: str) -> str:
+    def initialize_project(self, path: str, auto_deep_index: bool = True) -> str:
         """
         Initialize a project with comprehensive business logic.
 
@@ -83,6 +83,7 @@ class ProjectManagementService(BaseService):
 
         Args:
             path: Project directory path to initialize
+            auto_deep_index: If True, automatically build deep index if not already built
 
         Returns:
             Success message with project information
@@ -94,7 +95,7 @@ class ProjectManagementService(BaseService):
         self._validate_initialization_request(path)
 
         # Business workflow: Execute initialization
-        result = self._execute_initialization_workflow(path)
+        result = self._execute_initialization_workflow(path, auto_deep_index=auto_deep_index)
 
         # Business result formatting
         return self._format_initialization_result(result)
@@ -114,12 +115,13 @@ class ProjectManagementService(BaseService):
         if error:
             raise ValueError(error)
 
-    def _execute_initialization_workflow(self, path: str) -> ProjectInitializationResult:
+    def _execute_initialization_workflow(self, path: str, auto_deep_index: bool = True) -> ProjectInitializationResult:
         """
         Execute the core project initialization business workflow.
 
         Args:
             path: Project path to initialize
+            auto_deep_index: If True, automatically build deep index if not already built
 
         Returns:
             ProjectInitializationResult with initialization data
@@ -139,6 +141,11 @@ class ProjectManagementService(BaseService):
         # Business step 3.1: Store index manager in context for other services
         self.helper.update_index_manager(self._index_manager)
 
+        # Business step 3.2: Auto-build deep index if requested and not already built
+        deep_index_status = None
+        if auto_deep_index:
+            deep_index_status = self._auto_build_deep_index_if_needed(normalized_path)
+
         # Business step 4: Setup file monitoring
         monitoring_result = self._setup_file_monitoring(normalized_path)
 
@@ -148,10 +155,17 @@ class ProjectManagementService(BaseService):
         # Business step 6: Get search capabilities info
         search_info = self._get_search_capabilities_info()
 
+        # Update index source if deep index was built
+        index_source = index_result['source']
+        if deep_index_status == 'built':
+            index_source = 'deep_index_built'
+        elif deep_index_status == 'loaded':
+            index_source = 'deep_index_loaded'
+
         return ProjectInitializationResult(
             project_path=normalized_path,
             file_count=index_result['file_count'],
-            index_source=index_result['source'],
+            index_source=index_source,
             search_capabilities=search_info,
             monitoring_status=monitoring_result,
             message=f"Project initialized: {normalized_path}"
@@ -211,6 +225,53 @@ class ProjectManagementService(BaseService):
             'languages': []
         }
 
+    def _auto_build_deep_index_if_needed(self, project_path: str) -> str:
+        """
+        Automatically build deep index if not already built.
+
+        Args:
+            project_path: Project path
+
+        Returns:
+            'built' if new index was built, 'loaded' if existing index was used,
+            'skipped' if build was skipped, 'error' if build failed
+        """
+        try:
+            # Get user-configured exclude patterns
+            excludes = self._get_exclude_patterns()
+
+            # Set project path in deep index manager
+            if not self._index_manager.set_project_path(project_path, excludes):
+                logger.warning("Failed to set project path in deep index manager")
+                return 'error'
+
+            # Check if deep index already exists and is loaded
+            stats = self._index_manager.get_index_stats()
+            if stats.get('status') == 'loaded' and stats.get('indexed_files', 0) > 0:
+                logger.info(f"Deep index already loaded with {stats.get('indexed_files', 0)} files")
+                return 'loaded'
+
+            # Try to load existing deep index from disk
+            if self._index_manager.load_index():
+                stats = self._index_manager.get_index_stats()
+                if stats.get('status') == 'loaded' and stats.get('indexed_files', 0) > 0:
+                    logger.info(f"Loaded existing deep index with {stats.get('indexed_files', 0)} files")
+                    return 'loaded'
+
+            # Build new deep index
+            logger.info(f"Building deep index for: {project_path}")
+            if self._index_manager.refresh_index():
+                stats = self._index_manager.get_index_stats()
+                logger.info(f"Deep index built with {stats.get('indexed_files', 0)} files, "
+                           f"{stats.get('total_symbols', 0)} symbols")
+                return 'built'
+            else:
+                logger.warning("Failed to build deep index")
+                return 'error'
+
+        except Exception as e:
+            logger.error(f"Auto deep index build failed: {e}")
+            return 'error'
 
     def _is_valid_existing_index(self, index_data: Dict[str, Any]) -> bool:
         """
@@ -348,6 +409,16 @@ class ProjectManagementService(BaseService):
         if result.index_source == 'unified_manager':
             message = (f"Project path set to: {result.project_path}. "
                       f"Initialized unified index with {result.file_count} files. "
+                      f"{result.search_capabilities}.")
+        elif result.index_source == 'deep_index_built':
+            message = (f"Project path set to: {result.project_path}. "
+                      f"Indexed {result.file_count} files. "
+                      f"Deep index built (symbols extracted). "
+                      f"{result.search_capabilities}.")
+        elif result.index_source == 'deep_index_loaded':
+            message = (f"Project path set to: {result.project_path}. "
+                      f"Indexed {result.file_count} files. "
+                      f"Deep index loaded from cache. "
                       f"{result.search_capabilities}.")
         elif result.index_source == 'failed':
             message = (f"Project path set to: {result.project_path}. "

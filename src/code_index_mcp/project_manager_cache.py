@@ -3,6 +3,8 @@ Project Manager Cache - Per-project index manager instances.
 
 This module provides caching of index managers by project path,
 enabling multiple projects to be indexed simultaneously without interference.
+
+Updated: 2026-01-03 - Added session persistence fallback for HTTP transport
 """
 
 from __future__ import annotations
@@ -14,8 +16,40 @@ from typing import Dict, Optional, Tuple
 from .indexing.shallow_index_manager import ShallowIndexManager
 from .indexing.sqlite_index_manager import SQLiteIndexManager
 from .request_context import get_request_project_path
+from .utils.context_helper import get_session_project_path
 
 logger = logging.getLogger(__name__)
+
+
+def _get_effective_project_path(explicit_path: Optional[str] = None) -> Optional[str]:
+    """Get the effective project path from multiple sources.
+
+    Priority order:
+    1. Explicitly provided path
+    2. Request context (from HTTP header)
+    3. Persistent session storage (fallback for HTTP transport without headers)
+
+    Args:
+        explicit_path: Explicitly provided project path
+
+    Returns:
+        Project path from the first available source, or None
+    """
+    if explicit_path:
+        return explicit_path
+
+    # Try request context (HTTP header)
+    request_path = get_request_project_path()
+    if request_path:
+        return request_path
+
+    # Fallback to session storage (for HTTP transport without headers)
+    session_path = get_session_project_path()
+    if session_path:
+        logger.debug(f"[Cache] Using session path fallback: {session_path}")
+        return session_path
+
+    return None
 
 
 class ProjectManagerCache:
@@ -43,8 +77,8 @@ class ProjectManagerCache:
         Returns:
             ShallowIndexManager for the project
         """
-        # Use request context if no explicit path provided
-        path = project_path or get_request_project_path()
+        # Use effective path from multiple sources
+        path = _get_effective_project_path(project_path)
 
         if not path:
             return self._default_shallow
@@ -65,8 +99,8 @@ class ProjectManagerCache:
         Returns:
             SQLiteIndexManager for the project
         """
-        # Use request context if no explicit path provided
-        path = project_path or get_request_project_path()
+        # Use effective path from multiple sources
+        path = _get_effective_project_path(project_path)
 
         if not path:
             return self._default_sqlite
