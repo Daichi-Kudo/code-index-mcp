@@ -12,10 +12,37 @@ import sys
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
+from ..constants import WINDOWS_RESERVED_NAMES
 from ..indexing.qualified_names import normalize_file_path
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..utils.file_filter import FileFilter
+
+
+def get_windows_reserved_exclude_globs() -> List[str]:
+    """Return glob exclusion patterns for Windows reserved device names.
+
+    On Windows, files named after reserved devices (NUL, CON, PRN, etc.)
+    cannot be read as regular files and cause OS errors when search tools
+    attempt to open them.  This function returns ``!<name>`` patterns
+    suitable for ripgrep ``--glob`` or similar flags.
+
+    Returns an empty list on non-Windows platforms.
+    """
+    if sys.platform != "win32":
+        return []
+    return [f"!{name}" for name in sorted(WINDOWS_RESERVED_NAMES)]
+
+
+def is_windows_reserved_name(filename: str) -> bool:
+    """Check whether *filename* (without extension) is a Windows reserved name.
+
+    The check is case-insensitive and strips any extension, matching
+    Windows behaviour where ``NUL.txt`` is also reserved.
+    """
+    stem = filename.split(".")[0].lower()
+    return stem in WINDOWS_RESERVED_NAMES
+
 
 def parse_search_output(
     output: str,

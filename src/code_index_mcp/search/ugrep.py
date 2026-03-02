@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from typing import Dict, List, Optional, Tuple
 
-from .base import SearchStrategy, parse_search_output, create_word_boundary_pattern, is_safe_regex_pattern
+from .base import SearchStrategy, parse_search_output, create_word_boundary_pattern, is_safe_regex_pattern, get_windows_reserved_exclude_globs
 
 class UgrepStrategy(SearchStrategy):
     """Search strategy using the 'ugrep' (ug) command-line tool."""
@@ -90,6 +90,11 @@ class UgrepStrategy(SearchStrategy):
                 ignore_pattern = f'**/{normalized}'
             cmd.extend(['--ignore', ignore_pattern])
             processed_patterns.add(normalized)
+
+        # Exclude Windows reserved device names (NUL, CON, etc.)
+        for glob_pattern in get_windows_reserved_exclude_globs():
+            # ugrep uses --ignore instead of --glob; strip the leading '!'
+            cmd.extend(['--ignore', glob_pattern.lstrip('!')])
 
         # Add '--' to treat pattern as a literal argument, preventing injection
         cmd.append('--')

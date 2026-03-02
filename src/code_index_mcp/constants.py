@@ -9,6 +9,15 @@ INDEX_FILE = "index.json"  # JSON index file (deep index)
 INDEX_FILE_SHALLOW = "index.shallow.json"  # Minimal shallow index (file list)
 INDEX_FILE_DB = "index.db"  # SQLite deep index file
 
+# Windows reserved device names that cannot be opened as regular files.
+# Attempting to read these causes OS error 1 (ERROR_INVALID_FUNCTION).
+# All names are lowercase; comparisons should be case-insensitive.
+WINDOWS_RESERVED_NAMES = frozenset(
+    ["con", "prn", "aux", "nul"]
+    + [f"com{i}" for i in range(1, 10)]
+    + [f"lpt{i}" for i in range(1, 10)]
+)
+
 # Supported file extensions for code analysis
 # This is the authoritative list used by both old and new indexing systems
 SUPPORTED_EXTENSIONS = [

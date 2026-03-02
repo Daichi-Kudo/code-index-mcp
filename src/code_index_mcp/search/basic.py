@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .base import SearchStrategy, create_word_boundary_pattern, is_safe_regex_pattern
+from .base import SearchStrategy, create_word_boundary_pattern, is_safe_regex_pattern, is_windows_reserved_name
 
 class BasicSearchStrategy(SearchStrategy):
     """
@@ -90,6 +90,9 @@ class BasicSearchStrategy(SearchStrategy):
                 dirs[:] = [d for d in dirs if not file_filter.should_exclude_directory(d)]
 
             for file in files:
+                if is_windows_reserved_name(file):
+                    continue
+
                 if file_pattern and not self._matches_pattern(file, file_pattern):
                     continue
 

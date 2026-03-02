@@ -5,7 +5,7 @@ import shutil
 import subprocess
 from typing import Dict, List, Optional, Tuple
 
-from .base import SearchStrategy, parse_search_output, create_word_boundary_pattern, is_safe_regex_pattern
+from .base import SearchStrategy, parse_search_output, create_word_boundary_pattern, is_safe_regex_pattern, get_windows_reserved_exclude_globs
 
 class GrepStrategy(SearchStrategy):
     """
@@ -101,6 +101,11 @@ class GrepStrategy(SearchStrategy):
                 normalized = normalized[1:]
             cmd.append(f'--exclude={normalized}')
             processed_files.add(normalized)
+
+        # Exclude Windows reserved device names (NUL, CON, etc.)
+        for glob_pattern in get_windows_reserved_exclude_globs():
+            # grep uses --exclude; strip the leading '!'
+            cmd.append(f'--exclude={glob_pattern.lstrip("!")}')
 
         # Add -- to treat pattern as a literal argument, preventing injection
         cmd.append('--')
