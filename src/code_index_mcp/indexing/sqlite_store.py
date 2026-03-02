@@ -8,13 +8,16 @@ pragmas so higher-level builders/managers can focus on data orchestration.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import threading
 from contextlib import contextmanager
 from typing import Any, Dict, Generator, Optional
 
-SCHEMA_VERSION = 2
+logger = logging.getLogger(__name__)
+
+SCHEMA_VERSION = 3
 
 
 class SQLiteSchemaMismatchError(RuntimeError):
@@ -112,7 +115,9 @@ class SQLiteIndexStore:
                 imports TEXT,
                 exports TEXT,
                 package TEXT,
-                docstring TEXT
+                docstring TEXT,
+                mtime REAL,
+                size INTEGER
             )
             """
         )
@@ -149,10 +154,40 @@ class SQLiteIndexStore:
             self.set_metadata(conn, "schema_version", SCHEMA_VERSION)
             return
 
-        if int(stored) != SCHEMA_VERSION:
-            raise SQLiteSchemaMismatchError(
-                f"Unexpected schema version {stored} (expected {SCHEMA_VERSION})"
-            )
+        stored_int = int(stored)
+        if stored_int == SCHEMA_VERSION:
+            return
+
+        if stored_int < SCHEMA_VERSION:
+            self._migrate_schema(conn, stored_int, SCHEMA_VERSION)
+            return
+
+        raise SQLiteSchemaMismatchError(
+            f"Unexpected schema version {stored} (expected {SCHEMA_VERSION})"
+        )
+
+    def _migrate_schema(
+        self,
+        conn: sqlite3.Connection,
+        from_version: int,
+        to_version: int,
+    ) -> None:
+        """Apply sequential schema migrations."""
+        logger.info("Migrating schema from v%d to v%d", from_version, to_version)
+        if from_version < 3 <= to_version:
+            self._migrate_v2_to_v3(conn)
+        self.set_metadata(conn, "schema_version", to_version)
+
+    def _migrate_v2_to_v3(self, conn: sqlite3.Connection) -> None:
+        """Add mtime and size columns to files table."""
+        existing_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(files)")
+        }
+        if "mtime" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN mtime REAL")
+        if "size" not in existing_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN size INTEGER")
+        logger.info("Migrated schema v2 -> v3: added mtime, size to files")
 
     def _apply_pragmas(self, conn: sqlite3.Connection, for_build: bool) -> None:
         pragmas: Dict[str, Any] = {

@@ -80,24 +80,32 @@ class SQLiteIndexManager:
             return True
 
     def build_index(self, force_rebuild: bool = False) -> bool:
-        """Build or rebuild the SQLite index."""
+        """Build or rebuild the SQLite index.
+
+        Args:
+            force_rebuild: If True, perform full rebuild ignoring cache.
+                           If False (default), use incremental mode.
+        """
         with self._lock:
             if not self.index_builder:
                 logger.error("Index builder not initialized")
                 return False
             try:
-                stats = self.index_builder.build_index()
+                stats = self.index_builder.build_index(
+                    incremental=not force_rebuild,
+                )
                 logger.info(
-                    "SQLite index build complete: %s files, %s symbols",
+                    "SQLite index build complete: %s files, %s symbols (incremental=%s)",
                     stats.get("files"),
                     stats.get("symbols"),
+                    not force_rebuild,
                 )
                 self._is_loaded = True
                 return True
             except SQLiteSchemaMismatchError:
                 logger.warning("Schema mismatch detected; recreating database")
                 self.store.clear()  # type: ignore[union-attr]
-                stats = self.index_builder.build_index()
+                stats = self.index_builder.build_index(incremental=False)
                 logger.info(
                     "SQLite index rebuild after schema reset: %s files, %s symbols",
                     stats.get("files"),
@@ -131,11 +139,16 @@ class SQLiteIndexManager:
             self._is_loaded = metadata is not None
             return self._is_loaded
 
-    def refresh_index(self) -> bool:
-        """Force rebuild of the SQLite index."""
+    def refresh_index(self, force_rebuild: bool = False) -> bool:
+        """Rebuild the SQLite index (incremental by default).
+
+        Args:
+            force_rebuild: If True, perform full rebuild from scratch.
+                           If False (default), only process changed files.
+        """
         with self._lock:
-            logger.info("Refreshing SQLite deep index...")
-            if self.build_index(force_rebuild=True):
+            logger.info("Refreshing SQLite deep index (force=%s)...", force_rebuild)
+            if self.build_index(force_rebuild=force_rebuild):
                 return self.load_index()
             return False
 

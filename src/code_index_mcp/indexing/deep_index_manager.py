@@ -28,8 +28,8 @@ class DeepIndexManager:
     def load_index(self) -> bool:
         return self._mgr.load_index()
 
-    def refresh_index(self) -> bool:
-        return self._mgr.refresh_index()
+    def refresh_index(self, force_rebuild: bool = False) -> bool:
+        return self._mgr.refresh_index(force_rebuild=force_rebuild)
 
     def find_files(self, pattern: str = "*") -> List[str]:
         return self._mgr.find_files(pattern)

@@ -261,9 +261,15 @@ def get_file_content(file_path: str) -> str:
 
 @mcp.tool()
 @handle_mcp_tool_errors(return_type='str')
-def set_project_path(path: str, ctx: Context) -> str:
-    """Set the base project path for indexing."""
-    return ProjectManagementService(ctx).initialize_project(path)
+def set_project_path(path: str, ctx: Context, auto_deep_index: bool = True) -> str:
+    """Set the base project path for indexing.
+
+    Args:
+        path: The project directory path to index
+        auto_deep_index: If True (default), automatically build deep index if not already built.
+                        Set to False for faster initialization (file list only).
+    """
+    return ProjectManagementService(ctx).initialize_project(path, auto_deep_index=auto_deep_index)
 
 @mcp.tool()
 @handle_mcp_tool_errors(return_type='dict')
@@ -355,13 +361,16 @@ Manually rebuild the project file index. Use after git operations or when index 
 @mcp.tool()
 @handle_mcp_tool_errors(return_type='str')
 @with_concurrency_limit
-def build_deep_index(ctx: Context) -> str:
+def build_deep_index(ctx: Context, force_rebuild: bool = False) -> str:
     """
     Build the deep index (full symbol extraction) for the current project.
 
-    This performs a complete re-index and loads it into memory.
+    By default, performs incremental indexing (only processes new/changed files).
+    Set force_rebuild=True to perform a full re-index from scratch.
     """
-    return IndexManagementService(ctx).rebuild_deep_index()
+    return IndexManagementService(ctx).rebuild_deep_index(
+        force_rebuild=force_rebuild
+    )
 
 @mcp.tool()
 @handle_mcp_tool_errors(return_type='dict')

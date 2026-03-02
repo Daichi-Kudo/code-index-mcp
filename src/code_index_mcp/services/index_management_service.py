@@ -132,9 +132,12 @@ class IndexManagementService(BaseService):
             pass
         return patterns
 
-    def _execute_rebuild_workflow(self) -> IndexRebuildResult:
+    def _execute_rebuild_workflow(self, force_rebuild: bool = False) -> IndexRebuildResult:
         """
         Execute the core index rebuild business workflow.
+
+        Args:
+            force_rebuild: If True, perform full rebuild from scratch.
 
         Returns:
             IndexRebuildResult with rebuild data
@@ -148,8 +151,8 @@ class IndexManagementService(BaseService):
         if not self._index_manager.set_project_path(self.base_path, excludes):
             raise RuntimeError("Failed to set project path in index manager")
 
-        # Rebuild the index
-        if not self._index_manager.refresh_index():
+        # Rebuild the index (incremental by default)
+        if not self._index_manager.refresh_index(force_rebuild=force_rebuild):
             raise RuntimeError("Failed to rebuild index")
 
         # Get stats for result
@@ -216,11 +219,16 @@ class IndexManagementService(BaseService):
 
         return f"Shallow index built{f' with {count} files' if count else ''}."
 
-    def rebuild_deep_index(self) -> str:
-        """Rebuild the deep index using the original workflow."""
+    def rebuild_deep_index(self, force_rebuild: bool = False) -> str:
+        """Rebuild the deep index (incremental by default).
+
+        Args:
+            force_rebuild: If True, rebuild the entire index from scratch.
+                           If False (default), only process changed files.
+        """
         # Business validation
         self._validate_rebuild_request()
 
         # Deep rebuild via existing workflow
-        result = self._execute_rebuild_workflow()
+        result = self._execute_rebuild_workflow(force_rebuild=force_rebuild)
         return self._format_rebuild_result(result)
