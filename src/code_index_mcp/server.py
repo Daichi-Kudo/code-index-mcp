@@ -261,15 +261,13 @@ def get_file_content(file_path: str) -> str:
 
 @mcp.tool()
 @handle_mcp_tool_errors(return_type='str')
-def set_project_path(path: str, ctx: Context, auto_deep_index: bool = True) -> str:
+def set_project_path(path: str, ctx: Context) -> str:
     """Set the base project path for indexing.
 
     Args:
         path: The project directory path to index
-        auto_deep_index: If True (default), automatically build deep index if not already built.
-                        Set to False for faster initialization (file list only).
     """
-    return ProjectManagementService(ctx).initialize_project(path, auto_deep_index=auto_deep_index)
+    return ProjectManagementService(ctx).initialize_project(path)
 
 @mcp.tool()
 @handle_mcp_tool_errors(return_type='dict')

@@ -73,17 +73,17 @@ class ProjectManagementService(BaseService):
             pass
         return patterns
 
-    def initialize_project(self, path: str, auto_deep_index: bool = True) -> str:
+    def initialize_project(self, path: str) -> str:
         """
         Initialize a project with comprehensive business logic.
 
         This is the main business method that orchestrates the project
         initialization workflow, handling validation, cleanup, setup,
         and coordination of all project components.
+        Deep index is always built automatically (incremental/mtime-based, fast on subsequent calls).
 
         Args:
             path: Project directory path to initialize
-            auto_deep_index: If True, automatically build deep index if not already built
 
         Returns:
             Success message with project information
@@ -95,7 +95,7 @@ class ProjectManagementService(BaseService):
         self._validate_initialization_request(path)
 
         # Business workflow: Execute initialization
-        result = self._execute_initialization_workflow(path, auto_deep_index=auto_deep_index)
+        result = self._execute_initialization_workflow(path)
 
         # Business result formatting
         return self._format_initialization_result(result)
@@ -115,13 +115,13 @@ class ProjectManagementService(BaseService):
         if error:
             raise ValueError(error)
 
-    def _execute_initialization_workflow(self, path: str, auto_deep_index: bool = True) -> ProjectInitializationResult:
+    def _execute_initialization_workflow(self, path: str) -> ProjectInitializationResult:
         """
         Execute the core project initialization business workflow.
+        Deep index is always built automatically (incremental, fast on subsequent calls).
 
         Args:
             path: Project path to initialize
-            auto_deep_index: If True, automatically build deep index if not already built
 
         Returns:
             ProjectInitializationResult with initialization data
@@ -141,10 +141,8 @@ class ProjectManagementService(BaseService):
         # Business step 3.1: Store index manager in context for other services
         self.helper.update_index_manager(self._index_manager)
 
-        # Business step 3.2: Auto-build deep index if requested and not already built
-        deep_index_status = None
-        if auto_deep_index:
-            deep_index_status = self._auto_build_deep_index_if_needed(normalized_path)
+        # Business step 3.2: Always build deep index (incremental/mtime-based, fast on subsequent calls)
+        deep_index_status = self._auto_build_deep_index_if_needed(normalized_path)
 
         # Business step 4: Setup file monitoring
         monitoring_result = self._setup_file_monitoring(normalized_path)
