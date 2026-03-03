@@ -54,25 +54,34 @@ class CodeIntelligenceService(BaseService):
 
         # Use the global index manager
         index_manager = get_index_manager()
-        
-        # Debug logging
-        logger.info(f"Getting file summary for: {file_path}")
-        logger.info(f"Index manager state - Project path: {index_manager.project_path}")
-        logger.info(f"Index manager state - Has builder: {index_manager.index_builder is not None}")
-        if index_manager.index_builder:
-            logger.info(f"Index manager state - Has index: {index_manager.index_builder.in_memory_index is not None}")
-        
-        # Get file summary from JSON index
-        summary = index_manager.get_file_summary(file_path)
-        logger.info(f"Summary result: {summary is not None}")
 
-        # If deep index isn't available yet, return a helpful hint instead of error
+        # Get file summary from JSON index (with auto-build fallback)
+        summary = self._get_summary_with_auto_build(index_manager, file_path)
+
         if not summary:
             return {
-                "status": "needs_deep_index",
-                "message": "Deep index not available. Please run build_deep_index before calling get_file_summary.",
+                "status": "error",
+                "message": f"File not found in index: {file_path}",
                 "file_path": file_path
             }
+
+        return summary
+
+    def _get_summary_with_auto_build(self, index_manager, file_path: str):
+        """Get file summary, auto-building deep index if unavailable or corrupted."""
+        try:
+            summary = index_manager.get_file_summary(file_path)
+        except Exception as e:
+            logger.warning(f"get_file_summary failed ({e}), will attempt auto-build")
+            summary = None
+
+        if not summary and index_manager.project_path:
+            logger.info("Deep index not available, auto-building incrementally...")
+            try:
+                if index_manager.refresh_index():
+                    summary = index_manager.get_file_summary(file_path)
+            except Exception as e:
+                logger.error(f"Auto-build failed: {e}")
 
         return summary
 
@@ -124,14 +133,14 @@ class CodeIntelligenceService(BaseService):
                 - signature: The signature (if available)
                 - docstring: The docstring (if available)
         """
-        # Get file summary from index
+        # Get file summary from index (with auto-build fallback)
         index_manager = get_index_manager()
-        summary = index_manager.get_file_summary(file_path)
+        summary = self._get_summary_with_auto_build(index_manager, file_path)
 
         if not summary:
             return {
                 "status": "error",
-                "message": "File not found in index or deep index not built",
+                "message": f"File not found in index: {file_path}",
                 "file_path": file_path,
                 "symbol_name": symbol_name
             }
